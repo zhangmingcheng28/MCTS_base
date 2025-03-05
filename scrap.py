@@ -1,0 +1,1 @@
+np.linalg.norm(np.array(a) - np.array(b))
