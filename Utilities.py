@@ -7,7 +7,9 @@
 @Package dependency:
 """
 from shapely.geometry import Point, LineString
+from shapely.vectorized import contains
 import numpy as np
+from shapely.geometry import Point, Polygon
 import math
 import itertools
 from matplotlib.path import Path
@@ -75,8 +77,102 @@ def generate_start_end_positions(candidate_points, min_distance=400, boundary_ma
 
     return tuple(start_point), tuple(end_point)
 
+def filter_points_near_buildings_vectorized(candidate_points, buffered_polys):
+    """
+    Filters candidate points (as a NumPy array of shape (N,3)) to those within
+    any of the buffered building polygons using vectorized operations.
 
-def plot_trajectories(building_polygons, host_trajectory, intruder_trajectory, x_limit, y_limit):
+    Parameters:
+        candidate_points (np.array): Array of candidate points (x,y,z).
+        buffered_polys (list): List of Shapely Polygon objects (buffered buildings).
+
+    Returns:
+        np.array: Filtered candidate points (subset of input) that are within any buffered polygon.
+    """
+    # Extract x and y coordinates from candidate_points
+    xs = candidate_points[:, 0]
+    ys = candidate_points[:, 1]
+
+    # Initialize a boolean mask for all points
+    mask = np.zeros(candidate_points.shape[0], dtype=bool)
+
+    # For each buffered polygon, use vectorized "contains" to update the mask
+    for buff in buffered_polys:
+        mask |= contains(buff, xs, ys)
+
+    # Filter the candidate_points using the combined mask
+    filtered_points = candidate_points[mask]
+    return filtered_points
+
+
+def filter_points_near_buildings(candidate_points, building_polygons, buffer_distance=30):
+    """
+    Filters candidate points to those that are within buffer_distance (in meters)
+    of any building.
+
+    Parameters:
+        candidate_points (list of tuples): List of (x, y, z) points.
+        building_polygons (list of lists): Each element is a list of [x, y, z] vertices of a building.
+        buffer_distance (float): Buffer distance in meters (default 30).
+
+    Returns:
+        np.array: Filtered candidate points (as an array of (x,y,z)).
+    """
+    filtered = []
+    # Precompute buffered 2D polygons for each building (using only x,y)
+    buffered_polys = []
+    for poly in building_polygons:
+        # Extract (x,y) coordinates
+        poly_xy = [(pt[0], pt[1]) for pt in poly]
+        # Create a Shapely Polygon and buffer it
+        building_poly = Polygon(poly_xy)
+        buffered_polys.append(building_poly.buffer(buffer_distance))
+
+    filtered_points = filter_points_near_buildings_vectorized(candidate_points, buffered_polys)
+
+    return filtered_points
+
+
+def quad_to_triangles(quad):
+    """
+    Given a quadrilateral defined by 4 points (v0, v1, v2, v3) in order,
+    returns two triangles: (v0, v1, v2) and (v0, v2, v3).
+
+    quad: list/array of four points, each [x, y, z]
+    Returns: vertices (list of points), and triangle indices (i, j, k lists)
+    """
+    # vertices: v0, v1, v2, v3 in order
+    # Triangles: (0,1,2) and (0,2,3)
+    vertices = quad
+    i = [0, 0]
+    j = [1, 0]
+    k = [2, 2]
+    # second triangle: (0,2,3)
+    i[1] = 0
+    j[1] = 2
+    k[1] = 3
+    return vertices, i, j, k
+
+
+def fan_triangulation(polygon):
+    """
+    For a polygon defined by n vertices (assumed convex and ordered),
+    perform a fan triangulation using the first vertex as the pivot.
+
+    Returns the vertices (as is) and the triangle indices lists i, j, k.
+    """
+    n = len(polygon)
+    i = []
+    j = []
+    k = []
+    for t in range(1, n - 1):
+        i.append(0)
+        j.append(t)
+        k.append(t + 1)
+    return polygon, i, j, k
+
+
+def plot_trajectories(building_polygons, host_trajectory, intruder_trajectory, x_limit, y_limit, host_start, host_end):
     fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot(111, projection='3d')
 
@@ -102,9 +198,9 @@ def plot_trajectories(building_polygons, host_trajectory, intruder_trajectory, x
                 label='Host Trajectory')
 
         # Mark first and last points for the host UAV
-        ax.scatter(host_traj[0, 0], host_traj[0, 1], host_traj[0, 2], color='cyan', s=100, label='Host Start',
+        ax.scatter(host_start[0], host_start[1], host_start[2], color='cyan', s=10, label='Host Start',
                    marker='D')
-        ax.scatter(host_traj[-1, 0], host_traj[-1, 1], host_traj[-1, 2], color='darkblue', s=100,
+        ax.scatter(host_end[0], host_end[1], host_end[2], color='red', s=10,
                    label='Host End', marker='X')
 
     # Plot the intruder UAV's historical trajectory
@@ -263,6 +359,53 @@ def check_if_reach_goal(host_position, original_host_position, target_x, target_
             return 1
     else:
         return 0
+
+
+def compute_initial_path_heading_angle(p_init, p_dest, speed=10.0):
+    """
+    Computes the path angle (gamma) and heading angle (chi) that orient
+    a UAV from p_init to p_dest at the given speed. Angles are in degrees.
+
+    Parameters:
+        p_init (tuple): Initial position (x_init, y_init, z_init).
+        p_dest (tuple): Destination position (x_dest, y_dest, z_dest).
+        speed (float): UAV speed in m/s (default=10).
+
+    Returns:
+        (gamma_deg, chi_deg): Path angle (gamma) and heading angle (chi),
+                              both in degrees.
+    """
+    # 1. Direction vector from p_init to p_dest
+    dx = p_dest[0] - p_init[0]
+    dy = p_dest[1] - p_init[1]
+    dz = p_dest[2] - p_init[2]
+
+    # 2. Magnitude of the direction vector
+    dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+    if dist == 0:
+        raise ValueError("Initial and destination positions are identical.")
+
+    # 3. Unit direction vector
+    dx_hat = dx / dist
+    dy_hat = dy / dist
+    dz_hat = dz / dist
+
+    # 4. Velocity components (assuming UAV speed = 'speed')
+    vx = speed * dx_hat
+    vy = speed * dy_hat
+    vz = speed * dz_hat
+
+    # 5. Compute heading angle chi (in degrees)
+    #    heading angle = atan2(vy, vx)
+    chi_rad = math.atan2(vy, vx)
+    chi_deg = math.degrees(chi_rad)
+
+    # 6. Compute path angle gamma (in degrees)
+    #    path angle = asin(vz / speed)
+    gamma_rad = math.asin(vz / speed)
+    gamma_deg = math.degrees(gamma_rad)
+
+    return (gamma_deg, chi_deg)
 
 
 def get_original_position(current_pos, speed, dt, gamma_deg, chi_deg):

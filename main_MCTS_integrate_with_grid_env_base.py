@@ -612,8 +612,7 @@ if __name__ == "__main__":
             elif math.sqrt(
                     sum((a - b) ** 2 for a, b in zip(current_node.state.host_position, current_node.state.intruder_position[0]))) < 15:
                 print("Termination Reason: Host UAV collided with the intruder.")
-            elif math.sqrt(
-                    sum((a - b) ** 2 for a, b in zip(current_node.state.host_position, intruder_uav_simulation_start))) < 10:
+            elif current_node.state.terminal()==1:
                 print("Termination Reason: Host UAV reached its target.")
             else:
                 host_x, host_y, host_z = current_node.state.host_position
