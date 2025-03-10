@@ -252,3 +252,201 @@ holding_fix_distances = compute_holding_fix_distances(wsss_coord, holding_fixes)
 # Print results
 for fix, (lat, lon, dist) in holding_fix_distances.items():
     print(f"{fix}: Lat={lat:.6f}, Lon={lon:.6f}, Distance={dist:.2f} NM")
+
+
+# ---------------------------- simulating traj
+    host_uav_start = [259.47, 145.66, 35]
+    host_uav_end = [352.02, 120.93, 35]
+
+    intruder1_uav_start = [323.9, 112.2, 175.7]
+    intruder1_uav_end = [352.02, 120.94, 35]
+
+    intruder2_uav_start = [418.6, 203.7, 133.1]
+    intruder2_uav_end = [352.56, 120.83, 35]
+
+    intruder3_uav_start = [369.3, 115.6, 84.4]
+    intruder3_uav_end = [310.35, 132.09, 35]
+
+    intruder4_uav_start = [318.6, 211.0, 78.4]
+    intruder4_uav_end = [318.74, 129.82, 35]
+
+    intruder5_uav_start = [366.1, 170.8, 132.7]
+    intruder5_uav_end = [331.49, 126.42, 35]
+
+    one_dt = 1
+
+    sim = 1
+    sim_time = 0
+    host_uav_hist = [np.array(host_uav_start)]
+    intruder1_uav_hist = [np.array(intruder1_uav_start)]
+    intruder2_uav_hist = [np.array(intruder2_uav_start)]
+    intruder3_uav_hist = [np.array(intruder3_uav_start)]
+    intruder4_uav_hist = [np.array(intruder4_uav_start)]
+    intruder5_uav_hist = [np.array(intruder5_uav_start)]
+
+    current_host_pos = np.array(host_uav_start)
+    current_intr1_pos = np.array(intruder1_uav_start)
+    current_intr2_pos = np.array(intruder2_uav_start)
+    current_intr3_pos = np.array(intruder3_uav_start)
+    current_intr4_pos = np.array(intruder4_uav_start)
+    current_intr5_pos = np.array(intruder5_uav_start)
+
+    host_vel = np.array(desired_velocity(host_uav_start, host_uav_end, 10))
+    intru1_vel = np.array(desired_velocity(intruder1_uav_start, [352.02, 120.94, 35], 15))
+    intru2_vel = np.array(desired_velocity(intruder2_uav_start, [352.56, 120.83, 35], 15))
+    intru3_vel = np.array(desired_velocity(intruder3_uav_start, [310.35, 132.09, 35], 15))
+    intru4_vel = np.array(desired_velocity(intruder4_uav_start, [318.74, 129.82, 35], 15))
+    intru5_vel = np.array(desired_velocity(intruder5_uav_start, [331.49, 126.42, 35], 15))
+
+    while sim:
+        host_new_pos = current_host_pos + host_vel * one_dt
+        intru1_new_pos = current_intr1_pos + intru1_vel * one_dt
+        intru2_new_pos = current_intr2_pos + intru2_vel * one_dt
+        intru3_new_pos = current_intr3_pos + intru3_vel * one_dt
+        intru4_new_pos = current_intr4_pos + intru4_vel * one_dt
+        intru5_new_pos = current_intr5_pos + intru5_vel * one_dt
+
+        host_uav_hist.append(host_new_pos)
+        intruder1_uav_hist.append(intru1_new_pos)
+        intruder2_uav_hist.append(intru2_new_pos)
+        intruder3_uav_hist.append(intru3_new_pos)
+        intruder4_uav_hist.append(intru4_new_pos)
+        intruder5_uav_hist.append(intru5_new_pos)
+
+        current_host_pos = host_new_pos
+        current_intr1_pos = intru1_new_pos
+        current_intr2_pos = intru2_new_pos
+        current_intr3_pos = intru3_new_pos
+        current_intr4_pos = intru4_new_pos
+        current_intr5_pos = intru5_new_pos
+
+        # distance between host and intruder
+        diff1 = np.linalg.norm(current_host_pos - current_intr1_pos)
+        diff2 = np.linalg.norm(current_host_pos - current_intr2_pos)
+        diff3 = np.linalg.norm(current_host_pos - current_intr3_pos)
+        diff4 = np.linalg.norm(current_host_pos - current_intr4_pos)
+        diff5 = np.linalg.norm(current_host_pos - current_intr5_pos)
+
+        sim_time = sim_time + 1
+        print(
+            'The distance between host and intru1 is {}, between host and intru2 is {}, intru3 is {}, intru 4 is {}, intru 5 is {}'.format(
+                diff1, diff2, diff3, diff4, diff5))
+        if sim_time > 30:
+            sim = 0
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection='3d')
+    host_traj = np.array(host_uav_hist)
+    intru1_traj = np.array(intruder1_uav_hist)
+    intru2_traj = np.array(intruder2_uav_hist)
+    intru3_traj = np.array(intruder3_uav_hist)
+    intru4_traj = np.array(intruder4_uav_hist)
+    intru5_traj = np.array(intruder5_uav_hist)
+
+    ax.plot(host_traj[:, 0], host_traj[:, 1], host_traj[:, 2], color='blue', marker='o',
+            label='Host Trajectory')
+    ax.plot(intru1_traj[:, 0], intru1_traj[:, 1], intru1_traj[:, 2], color='green', marker='o',
+            label='intru1 Trajectory')
+    ax.plot(intru2_traj[:, 0], intru2_traj[:, 1], intru2_traj[:, 2], color='yellow', marker='o',
+            label='intru2 Trajectory')
+    ax.plot(intru3_traj[:, 0], intru3_traj[:, 1], intru3_traj[:, 2], color='cyan', marker='o',
+            label='intru3 Trajectory')
+    ax.plot(intru4_traj[:, 0], intru4_traj[:, 1], intru4_traj[:, 2], color='black', marker='o',
+            label='intru4 Trajectory')
+    ax.plot(intru5_traj[:, 0], intru5_traj[:, 1], intru5_traj[:, 2], color='red', marker='o',
+            label='intru5 Trajectory')
+    # Set limits in the 3D plot
+    ax.set_xlim(x_limit)
+    ax.set_ylim(y_limit)
+    ax.set_zlim(0, max([max(poly, key=lambda p: p[2])[2] for poly in building_polygons]) + 10)
+    # Labels and limits
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Height')
+    # Add legend to distinguish trajectories
+    ax.legend()
+    plt.show()
+
+# diff_vec = list(np.array(host_trajectory) - np.array(intruder_positions_history[0]))
+#
+# diff_list = []
+# for i in diff_vec:
+#     dist_diff = np.linalg.norm(i)
+#     diff_list.append([dist_diff])
+
+# ------------ two uav
+host_uav_start = [259.47, 145.66, 35]
+host_uav_end = [396.39, 109.09, 35]
+
+intruder1_uav_start = [236.69, 74.64, 50]
+intruder1_uav_end   = [419.17, 180.11, 20]
+
+intruder2_uav_start = [500, 103.93, 40]
+intruder2_uav_end   = [212.0, 158.36, 30]
+
+
+one_dt = 1
+
+sim = 1
+sim_time = 0
+host_uav_hist = [np.array(host_uav_start)]
+intruder1_uav_hist = [np.array(intruder1_uav_start)]
+intruder2_uav_hist = [np.array(intruder2_uav_start)]
+
+
+current_host_pos = np.array(host_uav_start)
+current_intr1_pos = np.array(intruder1_uav_start)
+current_intr2_pos = np.array(intruder2_uav_start)
+
+
+host_vel = np.array(desired_velocity(host_uav_start, host_uav_end, 10))
+intru1_vel = np.array(desired_velocity(intruder1_uav_start, intruder1_uav_end, 15))
+intru2_vel = np.array(desired_velocity(intruder2_uav_start, intruder2_uav_end, 15))
+
+
+while sim:
+    host_new_pos = current_host_pos + host_vel * one_dt
+    intru1_new_pos = current_intr1_pos + intru1_vel * one_dt
+    intru2_new_pos = current_intr2_pos + intru2_vel * one_dt
+
+    host_uav_hist.append(host_new_pos)
+    intruder1_uav_hist.append(intru1_new_pos)
+    intruder2_uav_hist.append(intru2_new_pos)
+
+    current_host_pos = host_new_pos
+    current_intr1_pos = intru1_new_pos
+    current_intr2_pos = intru2_new_pos
+
+    # distance between host and intruder
+    diff1 = np.linalg.norm(current_host_pos - current_intr1_pos)
+    diff2 = np.linalg.norm(current_host_pos - current_intr2_pos)
+
+    sim_time = sim_time + 1
+    print(
+        'The distance between host and intru1 is {}, between host and intru2 is {}'.format(
+            diff1, diff2))
+    if sim_time > 30:
+        sim = 0
+fig = plt.figure(figsize=(10, 7))
+ax = fig.add_subplot(111, projection='3d')
+host_traj = np.array(host_uav_hist)
+intru1_traj = np.array(intruder1_uav_hist)
+intru2_traj = np.array(intruder2_uav_hist)
+
+ax.plot(host_traj[:, 0], host_traj[:, 1], host_traj[:, 2], color='blue', marker='o',
+        label='Host Trajectory')
+ax.plot(intru1_traj[:, 0], intru1_traj[:, 1], intru1_traj[:, 2], color='green', marker='o',
+        label='intru1 Trajectory')
+ax.plot(intru2_traj[:, 0], intru2_traj[:, 1], intru2_traj[:, 2], color='yellow', marker='o',
+        label='intru2 Trajectory')
+
+# Set limits in the 3D plot
+ax.set_xlim(x_limit)
+ax.set_ylim(y_limit)
+ax.set_zlim(0, max([max(poly, key=lambda p: p[2])[2] for poly in building_polygons]) + 10)
+# Labels and limits
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Height')
+# Add legend to distinguish trajectories
+ax.legend()
+plt.show()
